@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trophy, Heart, Zap, Play, RotateCcw, ShoppingBag, ArrowLeft, Coins, ShieldCheck, Rocket } from 'lucide-react';
+import { Trophy, Heart, Play, ShoppingBag, ArrowLeft, Coins, Rocket } from 'lucide-react';
 
 const App = () => {
+  // --- গেম স্টেট ---
   const [view, setView] = useState('HOME');
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(parseInt(localStorage.getItem('spaceHighScore')) || 0);
@@ -10,68 +11,47 @@ const App = () => {
   
   const [selectedShipIndex, setSelectedShipIndex] = useState(0);
   const ships = [
-    { id: 0, name: 'Scout X', color: '#3b82f6', price: 0, speed: 8, bulletSpeed: 12, power: 1 },
-    { id: 1, name: 'Vanguard', color: '#8b5cf6', price: 500, speed: 10, bulletSpeed: 15, power: 2 },
-    { id: 2, name: 'Destroyer', color: '#ef4444', price: 1500, speed: 12, bulletSpeed: 18, power: 3 },
+    { id: 0, name: 'Scout X', color: '#3b82f6', price: 0, speed: 8, bulletSpeed: 12 },
+    { id: 1, name: 'Vanguard', color: '#8b5cf6', price: 500, speed: 10, bulletSpeed: 15 },
+    { id: 2, name: 'Destroyer', color: '#ef4444', price: 1500, speed: 12, bulletSpeed: 18 },
   ];
   const [unlockedShips, setUnlockedShips] = useState(JSON.parse(localStorage.getItem('unlockedShips')) || [0]);
 
   const canvasRef = useRef(null);
   const gameRef = useRef({
-    player: { x: 0, y: 0, radius: 15, shield: 0, powerUp: 0 },
-    bullets: [], enemyBullets: [], enemies: [], particles: [], powerups: [], stars: [],
-    keys: {}, animationId: null, frameCount: 0, boss: null, shake: 0
+    player: { x: 0, y: 0, radius: 18 },
+    bullets: [], enemies: [], stars: [], keys: {}, animationId: null, frameCount: 0
   });
 
-  const audioCtx = useRef(null);
-  const playSfx = (type) => {
-    if (!audioCtx.current) return;
-    const ctx = audioCtx.current;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.connect(g); g.connect(ctx.destination);
-    const now = ctx.currentTime;
-    if (type === 'laser') {
-      osc.type = 'triangle'; osc.frequency.setValueAtTime(1200, now);
-      osc.frequency.exponentialRampToValueAtTime(150, now + 0.1);
-      g.gain.setValueAtTime(0.04, now); osc.start(now); osc.stop(now + 0.1);
-    } else if (type === 'hit') {
-      osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, now);
-      g.gain.setValueAtTime(0.1, now); osc.start(now); osc.stop(now + 0.2);
-    }
-  };
-
-  // ক্যানভাস সাইজ ঠিক করার ফাংশন (Fixes the "Large Ship" & Position issue)
-  const resizeCanvas = () => {
+  // --- ক্যানভাস সাইজ ঠিক করা (Fix for ship position) ---
+  const initCanvas = () => {
     const canvas = canvasRef.current;
     if (canvas) {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      if (gameRef.current.player) {
-        gameRef.current.player.x = canvas.width / 2;
-        gameRef.current.player.y = canvas.height - 100;
-      }
+      gameRef.current.player.x = canvas.width / 2;
+      gameRef.current.player.y = canvas.height - 100;
     }
   };
 
   useEffect(() => {
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-    return () => window.removeEventListener('resize', resizeCanvas);
+    initCanvas();
+    window.addEventListener('resize', initCanvas);
+    return () => window.removeEventListener('resize', initCanvas);
   }, []);
 
   const startGame = () => {
-    if (!audioCtx.current) audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
-    const ship = ships[selectedShipIndex];
     const canvas = canvasRef.current;
+    if (!canvas) return;
     
+    const ship = ships[selectedShipIndex];
     gameRef.current = {
       ...gameRef.current,
-      player: { x: canvas.width / 2, y: canvas.height - 100, radius: 18, shield: 0, powerUp: 0, ...ship },
-      bullets: [], enemyBullets: [], enemies: [], particles: [], powerups: [], boss: null, shake: 0, frameCount: 0,
+      player: { x: canvas.width / 2, y: canvas.height - 100, radius: 18, ...ship },
+      bullets: [], enemies: [], frameCount: 0,
       stars: Array.from({ length: 100 }, () => ({
         x: Math.random() * canvas.width, y: Math.random() * canvas.height,
-        size: Math.random() * 2, speed: Math.random() * 8 + 2
+        size: Math.random() * 2, speed: Math.random() * 5 + 2
       }))
     };
     
@@ -83,84 +63,83 @@ const App = () => {
   const update = () => {
     if (view !== 'PLAYING') return;
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const g = gameRef.current;
-    const { player, bullets, enemies, stars, particles } = g;
 
-    // Background
+    // ১. ব্যাকগ্রাউন্ড ক্লিন করা
     ctx.fillStyle = '#020617';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Warp Stars
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    stars.forEach(s => {
-      s.y += s.speed; if (s.y > canvas.height) s.y = 0;
+    // ২. স্টার মুভমেন্ট
+    ctx.fillStyle = 'white';
+    g.stars.forEach(s => {
+      s.y += s.speed;
+      if (s.y > canvas.height) s.y = 0;
       ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fill();
     });
 
-    // Player Movement
-    if (g.keys['ArrowLeft'] && player.x > 30) player.x -= player.speed;
-    if (g.keys['ArrowRight'] && player.x < canvas.width - 30) player.x += player.speed;
+    // ৩. প্লেয়ার মুভমেন্ট
+    if (g.keys['ArrowLeft'] && g.player.x > 30) g.player.x -= g.player.speed;
+    if (g.keys['ArrowRight'] && g.player.x < canvas.width - 30) g.player.x += g.player.speed;
 
-    // Draw Player Ship (Glow style)
+    // ৪. প্লেয়ার ড্রয়িং
     ctx.save();
-    ctx.shadowBlur = 20; ctx.shadowColor = player.color;
-    ctx.fillStyle = player.color;
+    ctx.shadowBlur = 15; ctx.shadowColor = g.player.color;
+    ctx.fillStyle = g.player.color;
     ctx.beginPath();
-    ctx.moveTo(player.x, player.y - 25);
-    ctx.lineTo(player.x - 20, player.y + 15);
-    ctx.lineTo(player.x + 20, player.y + 15);
+    ctx.moveTo(g.player.x, g.player.y - 25);
+    ctx.lineTo(g.player.x - 20, g.player.y + 15);
+    ctx.lineTo(g.player.x + 20, g.player.y + 15);
     ctx.fill();
     ctx.restore();
 
-    // Shooting
+    // ৫. অটো শ্যুটিং
     g.frameCount++;
-    if (g.frameCount % 12 === 0) {
-        bullets.push({ x: player.x, y: player.y - 20, speed: player.bulletSpeed, color: player.color });
-        playSfx('laser');
+    if (g.frameCount % 15 === 0) {
+      g.bullets.push({ x: g.player.x, y: g.player.y - 20, speed: g.player.bulletSpeed });
     }
 
-    // Update Bullets
-    bullets.forEach((b, i) => {
+    // ৬. বুলেট আপডেট
+    g.bullets.forEach((b, i) => {
       b.y -= b.speed;
-      ctx.fillStyle = b.color;
-      ctx.fillRect(b.x - 2, b.y, 4, 15);
-      if (b.y < 0) bullets.splice(i, 1);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(b.x - 2, b.y, 4, 12);
+      if (b.y < 0) g.bullets.splice(i, 1);
     });
 
-    // Enemies
+    // ৭. এনিমি আপডেট
     if (g.frameCount % 60 === 0) {
-      enemies.push({
+      g.enemies.push({
         x: Math.random() * (canvas.width - 60) + 30, y: -50,
-        radius: 20 + Math.random() * 20, speed: 2 + Math.random() * 3,
-        hp: 2, color: '#f43f5e'
+        radius: 20, speed: 3 + (score / 1000)
       });
     }
 
-    enemies.forEach((e, i) => {
+    g.enemies.forEach((e, i) => {
       e.y += e.speed;
-      ctx.strokeStyle = e.color; ctx.lineWidth = 2;
-      ctx.strokeRect(e.x - e.radius, e.y - e.radius, e.radius * 2, e.radius * 2);
+      ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2;
+      ctx.strokeRect(e.x - 15, e.y - 15, 30, 30);
 
-      // Collision with player
-      if (Math.hypot(player.x - e.x, player.y - e.y) < e.radius + 15) {
+      // কলিশন (ধাক্কা লাগা)
+      if (Math.hypot(g.player.x - e.x, g.player.y - e.y) < 35) {
         setLives(l => {
-            if (l <= 1) { setView('HOME'); return 3; }
-            return l - 1;
+          if (l <= 1) { setView('HOME'); return 3; }
+          return l - 1;
         });
-        enemies.splice(i, 1);
+        g.enemies.splice(i, 1);
       }
 
-      // Collision with bullets
-      bullets.forEach((b, bi) => {
-        if (Math.hypot(b.x - e.x, b.y - e.y) < e.radius) {
+      // বুলেটের সাথে কলিশন
+      g.bullets.forEach((b, bi) => {
+        if (Math.hypot(b.x - e.x, b.y - e.y) < 25) {
           setScore(s => s + 10);
           setCoins(c => c + 1);
-          enemies.splice(i, 1);
-          bullets.splice(bi, 1);
+          g.enemies.splice(i, 1);
+          g.bullets.splice(bi, 1);
         }
       });
-      if (e.y > canvas.height) enemies.splice(i, 1);
+      if (e.y > canvas.height) g.enemies.splice(i, 1);
     });
 
     g.animationId = requestAnimationFrame(update);
@@ -169,8 +148,8 @@ const App = () => {
   useEffect(() => {
     if (view === 'PLAYING') {
       gameRef.current.animationId = requestAnimationFrame(update);
-      const handleDown = (e) => { gameRef.current.keys[e.code] = true; };
-      const handleUp = (e) => { gameRef.current.keys[e.code] = false; };
+      const handleDown = (e) => gameRef.current.keys[e.code] = true;
+      const handleUp = (e) => gameRef.current.keys[e.code] = false;
       window.addEventListener('keydown', handleDown);
       window.addEventListener('keyup', handleUp);
       return () => {
@@ -182,83 +161,45 @@ const App = () => {
   }, [view]);
 
   return (
-    <div className="w-full h-screen bg-[#020617] text-white overflow-hidden relative font-sans">
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+    <div className="w-full h-screen bg-black text-white relative font-sans overflow-hidden">
+      <canvas ref={canvasRef} className="absolute inset-0" />
 
-      {/* GLASS UI - HOME */}
+      {/* --- HOME UI --- */}
       {view === 'HOME' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center backdrop-blur-md bg-black/30">
-          <div className="relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-full blur opacity-75 group-hover:opacity-100 transition duration-1000"></div>
-            <div className="relative bg-black rounded-full p-8 mb-6 text-7xl">🚀</div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-md">
+          <div className="p-10 bg-white/5 border border-white/10 rounded-[3rem] text-center mb-8 shadow-2xl">
+            <Rocket size={60} className="mx-auto text-blue-500 mb-4 animate-bounce" />
+            <h1 className="text-5xl font-black tracking-tighter">SPACE ULTRA</h1>
+            <p className="text-gray-400 text-xs tracking-widest uppercase mt-2 font-bold">Glass Edition</p>
           </div>
           
-          <h1 className="text-7xl font-black mb-2 tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-gray-500">
-            SPACE GLASS
-          </h1>
-          
-          <div className="flex gap-6 mb-12">
-            <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-[2rem] text-center min-w-[140px]">
-              <p className="text-[10px] uppercase tracking-widest text-blue-400 font-bold">Credits</p>
-              <p className="text-3xl font-black flex items-center justify-center gap-2"><Coins size={20}/> {coins}</p>
+          <div className="flex gap-4 mb-10">
+            <div className="bg-white/10 px-6 py-4 rounded-2xl border border-white/10 text-center">
+              <p className="text-[10px] text-gray-500 font-bold uppercase">Best</p>
+              <p className="text-2xl font-black">{highScore}</p>
             </div>
-            <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-[2rem] text-center min-w-[140px]">
-              <p className="text-[10px] uppercase tracking-widest text-rose-400 font-bold">Best</p>
-              <p className="text-3xl font-black">{highScore}</p>
+            <div className="bg-white/10 px-6 py-4 rounded-2xl border border-white/10 text-center">
+              <p className="text-[10px] text-gray-500 font-bold uppercase">Coins</p>
+              <p className="text-2xl font-black text-amber-400 flex items-center gap-2"><Coins size={18}/> {coins}</p>
             </div>
           </div>
 
-          <div className="flex flex-col gap-4 w-64">
-            <button onClick={startGame} className="group relative py-5 bg-white text-black rounded-2xl font-black text-lg overflow-hidden transition-all hover:scale-105 active:scale-95">
-                <div className="absolute inset-0 bg-blue-500 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                <span className="relative group-hover:text-white flex items-center justify-center gap-2 uppercase tracking-tighter">
-                   <Play fill="currentColor" size={20}/> Launch
-                </span>
-            </button>
-            <button onClick={() => setView('SHOP')} className="py-5 bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl font-bold hover:bg-white/10 transition-all uppercase text-sm tracking-widest">
-                Hangar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* HUD - PLAYING */}
-      {view === 'PLAYING' && (
-        <div className="absolute top-0 left-0 w-full p-8 flex justify-between items-start pointer-events-none">
-          <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-5 rounded-3xl">
-            <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Score</p>
-            <p className="text-4xl font-black tabular-nums">{score}</p>
-          </div>
-          <div className="flex gap-2 bg-white/5 backdrop-blur-2xl border border-white/10 p-5 rounded-3xl">
-             {[...Array(3)].map((_, i) => (
-               <Heart key={i} size={24} fill={i < lives ? "#f43f5e" : "none"} className={i < lives ? "text-rose-500" : "text-white/20"} />
-             ))}
-          </div>
-        </div>
-      )}
-
-      {/* SHOP - GLASS STYLE */}
-      {view === 'SHOP' && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-3xl p-10 flex flex-col">
-          <button onClick={() => setView('HOME')} className="w-fit flex items-center gap-2 text-white/50 hover:text-white mb-10 transition-colors uppercase text-xs font-bold tracking-widest">
-            <ArrowLeft size={16}/> Back to Deck
+          <button onClick={startGame} className="w-64 py-5 bg-blue-600 rounded-2xl font-black text-xl hover:bg-blue-500 transition-all active:scale-95 shadow-lg shadow-blue-500/20">
+            START GAME
           </button>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {ships.map((s, i) => (
-                <div key={i} className={`p-8 rounded-[3rem] border transition-all ${selectedShipIndex === i ? 'bg-blue-500/20 border-blue-500' : 'bg-white/5 border-white/10 hover:border-white/30'}`}>
-                    <div className="w-16 h-16 rounded-2xl mb-6 flex items-center justify-center text-3xl shadow-inner" style={{backgroundColor: s.color}}>🚀</div>
-                    <h3 className="text-2xl font-black mb-1">{s.name}</h3>
-                    <p className="text-xs text-white/40 mb-8 uppercase tracking-widest">Speed: {s.speed}</p>
-                    {unlockedShips.includes(s.id) ? (
-                        <button onClick={() => setSelectedShipIndex(i)} className="w-full py-4 rounded-xl bg-white text-black font-black uppercase text-xs">
-                            {selectedShipIndex === i ? 'Active' : 'Select'}
-                        </button>
-                    ) : (
-                        <button onClick={() => { if(coins >= s.price) {setCoins(c=>c-s.price); setUnlockedShips([...unlockedShips, s.id])}}} className="w-full py-4 rounded-xl bg-blue-600 font-black uppercase text-xs">
-                            {s.price} Credits
-                        </button>
-                    )}
-                </div>
+        </div>
+      )}
+
+      {/* --- HUD --- */}
+      {view === 'PLAYING' && (
+        <div className="absolute top-0 left-0 w-full p-6 flex justify-between items-center pointer-events-none">
+          <div className="bg-white/10 backdrop-blur-md border border-white/20 px-6 py-3 rounded-2xl">
+            <p className="text-[10px] font-bold text-blue-400 uppercase">Score</p>
+            <p className="text-3xl font-black">{score}</p>
+          </div>
+          <div className="flex gap-2 bg-white/10 backdrop-blur-md border border-white/20 px-6 py-4 rounded-2xl">
+            {[...Array(3)].map((_, i) => (
+              <Heart key={i} size={24} fill={i < lives ? "#f43f5e" : "none"} className={i < lives ? "text-rose-500" : "text-white/20"} />
             ))}
           </div>
         </div>
@@ -268,3 +209,4 @@ const App = () => {
 };
 
 export default App;
+                
