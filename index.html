@@ -8,9 +8,9 @@ import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged }
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
 /**
- * COSMIC GUARDIAN: ELITE BULLETPROOF EDITION
- * Fixed the "White Screen" issue by implementing strict error boundaries
- * and safe global variable checking.
+ * COSMIC GUARDIAN: FIXED EDITION
+ * - Fixed: Added missing 'bossActive' state which was causing the White Screen crash.
+ * - Optimized: Better error handling for startup.
  */
 
 // --- Safe Configuration & Firebase Initialization ---
@@ -38,7 +38,7 @@ const SHIPS = [
 ];
 
 const App = () => {
-  // --- UI States with Default Fallbacks ---
+  // --- UI States ---
   const [view, setView] = useState('HOME');
   const [user, setUser] = useState(null);
   const [score, setScore] = useState(0);
@@ -48,6 +48,9 @@ const App = () => {
   const [combo, setCombo] = useState(0);
   const [showWarning, setShowWarning] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  
+  // --- FIXED: Missing State Added ---
+  const [bossActive, setBossActive] = useState(false); 
   
   // --- Persistent Stats ---
   const [highScore, setHighScore] = useState(0);
@@ -378,7 +381,7 @@ const App = () => {
   useEffect(() => {
     if (view === 'PLAYING' && !isPaused) requestRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(requestRef.current);
-  }, [view, isPaused, score, bossActive, combo]);
+  }, [view, isPaused, score, bossActive, combo]); // Now safe because bossActive is defined
 
   const openCrate = () => { if (crates > 0) { playSfx('coin'); const reward = Math.floor(Math.random() * 50) + 15; const nC = coins + reward; const nCr = crates - 1; setCoins(nC); setCrates(nCr); saveStats({ coins: nC, crates: nCr }); alert(`CRATE UNLOCKED! FOUND ${reward} CREDITS`); } };
   const buyShip = (idx) => { const s = SHIPS[idx]; if (unlockedShips.includes(idx)) setSelectedShipIndex(idx); else if (coins >= s.price) { playSfx('coin'); const u = [...unlockedShips, idx]; const c = coins - s.price; setUnlockedShips(u); setCoins(c); setSelectedShipIndex(idx); saveStats({ coins: c, unlockedShips: u, selectedShipIndex: idx }); } };
@@ -397,5 +400,4 @@ const App = () => {
              <p className="text-xs font-bold tracking-[0.5em] mt-2 uppercase text-cyan-200">BULLETPROOF ELITE</p>
           </div>
           <div className="w-full max-w-xs space-y-4">
-             <button onClick={startMission} className="w-full py-5 bg-blue-600 rounded-2xl font-black text-xl flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all"><Play fill="white" /> START MISSION</button>
-             <div className="grid grid-col
+             <button onClick={startMission} className="w-full py-5 bg-blue-600 rounded-2xl font-black text-xl flex items-center justify-center gap
